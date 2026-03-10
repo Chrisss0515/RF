@@ -1,0 +1,51 @@
+import os
+import rasterio
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+import joblib
+
+eval_factors = {
+}
+
+disaster_points = pd.read_csv('disaster_points.csv')
+non_disaster_points = pd.read_csv('non_disaster_points.csv')
+
+disaster_points['target'] = 1
+non_disaster_points['target'] = 0
+
+all_points = pd.concat([disaster_points, non_disaster_points])
+
+X_train = []
+
+for factor, filepath in eval_factors.items():
+    with rasterio.open(filepath) as src:
+        data = src.read(1)
+        transform = src.transform
+        width, height = src.width, src.height
+        for _, row in all_points.iterrows():
+            col, row_idx = ~transform * (row['longitude'], row['latitude'])
+            col, row_idx = int(col), int(row_idx)
+            if 0 <= col < width and 0 <= row_idx < height:
+                X_train.append(data[row_idx, col])
+
+X_train = np.array(X_train)
+y_train = all_points['target'].values
+
+X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+y_prob = model.predict_proba(X_test)[:, 1]
+
+print(f'Accuracy: {accuracy_score(y_test, y_pred)}')
+print(f'Precision: {precision_score(y_test, y_pred)}')
+print(f'Recall: {recall_score(y_test, y_pred)}')
+print(f'F1 Score: {f1_score(y_test, y_pred)}')
+print(f'ROC AUC: {roc_auc_score(y_test, y_prob)}')
+
+joblib.dump(model, 'rf.pkl')
