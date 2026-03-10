@@ -1,0 +1,22 @@
+eval_factors = {
+}
+
+X_pred = []
+for factor, filepath in eval_factors.items():
+    with rasterio.open(filepath) as src:
+        data = src.read(1)
+        X_pred.append(data)
+        transform = src.transform
+        width, height = src.width, src.height
+
+X_pred = np.array(X_pred).transpose(1, 2, 0)
+
+model = joblib.load('rf.pkl')
+
+y_pred = model.predict(X_pred.reshape(-1, X_pred.shape[2]))
+y_prob = model.predict_proba(X_pred.reshape(-1, X_pred.shape[2]))[:, 1]
+
+with rasterio.open('', 'w', driver='GTiff',
+                   height=height, width=width,
+                   count=1, dtype='float32', transform=transform) as dst:
+    dst.write(y_prob.reshape(height, width), 1)
